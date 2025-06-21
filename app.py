@@ -122,31 +122,64 @@ def setup_fizzo_automation():
         
         # Auto-install browsers if needed
         try:
-            # Use the improved install_playwright.py script
-            from install_playwright import install_playwright_browsers
+            # Import required modules first
+            import subprocess
+            import sys
+            import os
             
-            # Run the installation function
-            if install_playwright_browsers():
-                logger.info("✅ Playwright browsers installed successfully via install_playwright.py")
+            logger.info("🎭 Installing Playwright browsers...")
+            
+            # Define a function to install Playwright browsers inline
+            def install_playwright_browsers_inline():
+                """Install Playwright browsers with robust error handling"""
+                try:
+                    logger.info("🔄 Attempting installation with --with-deps...")
+                    result = subprocess.run(
+                        [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
+                        capture_output=True, text=True, timeout=300
+                    )
+                    
+                    if result.returncode == 0:
+                        logger.info("✅ Playwright browsers installed successfully with dependencies")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Installation with --with-deps failed: {result.stderr}")
+                        
+                        # Try without --with-deps
+                        logger.info("🔄 Attempting installation without --with-deps...")
+                        result2 = subprocess.run(
+                            [sys.executable, "-m", "playwright", "install", "chromium"],
+                            capture_output=True, text=True, timeout=300
+                        )
+                        
+                        if result2.returncode == 0:
+                            logger.info("✅ Playwright browsers installed successfully (without deps)")
+                            return True
+                        else:
+                            logger.error(f"❌ Installation failed: {result2.stderr}")
+                            return False
+                except Exception as e:
+                    logger.error(f"❌ Error during installation: {e}")
+                    return False
+            
+            # Run the inline installation function
+            if install_playwright_browsers_inline():
+                logger.info("✅ Playwright browsers installed successfully")
             else:
-                logger.warning("⚠️ Playwright browser installation failed via install_playwright.py")
+                logger.warning("⚠️ Playwright browser installation failed")
                 
-                # Fallback to direct installation if the script fails
-                import subprocess
-                import sys
-                logger.info("🔄 Trying direct installation as fallback...")
+                # Try multiple installation approaches as fallback
+                logger.info("🔄 Trying alternative installation methods...")
                 
-                # Try multiple installation approaches
                 installation_methods = [
-                    # Method 1: With --with-deps
-                    [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
-                    # Method 2: Without --with-deps
-                    [sys.executable, "-m", "playwright", "install", "chromium"],
-                    # Method 3: With explicit browser version
+                    # Method 1: With explicit browser version
                     [sys.executable, "-m", "playwright", "install", "--with-deps", "chromium@1169"],
-                    # Method 4: With force reinstall
-                    [sys.executable, "-m", "pip", "install", "--force-reinstall", "playwright", "&&", 
-                     sys.executable, "-m", "playwright", "install", "chromium"]
+                    # Method 2: With force reinstall of playwright
+                    [sys.executable, "-m", "pip", "install", "--force-reinstall", "playwright"],
+                    # Method 3: Try with system pip
+                    ["pip", "install", "--upgrade", "playwright"],
+                    # Method 4: Try with explicit path
+                    ["python3", "-m", "playwright", "install", "chromium"]
                 ]
                 
                 for i, method in enumerate(installation_methods):
@@ -155,8 +188,15 @@ def setup_fizzo_automation():
                         result = subprocess.run(method, capture_output=True, text=True, timeout=300)
                         
                         if result.returncode == 0:
-                            logger.info(f"✅ Playwright Chromium installed successfully with method {i+1}")
-                            break
+                            logger.info(f"✅ Method {i+1} succeeded, now installing browser...")
+                            # Try to install browser after successful playwright installation
+                            browser_result = subprocess.run(
+                                [sys.executable, "-m", "playwright", "install", "chromium"],
+                                capture_output=True, text=True, timeout=300
+                            )
+                            if browser_result.returncode == 0:
+                                logger.info(f"✅ Browser installed successfully with method {i+1}")
+                                break
                         else:
                             logger.warning(f"⚠️ Installation method {i+1} failed: {result.stderr}")
                     except Exception as e:
