@@ -133,15 +133,18 @@ def setup_fizzo_automation():
             def install_playwright_browsers_inline():
                 """Install Playwright browsers with robust error handling"""
                 try:
+                    # Use /tmp directory which should be writable
+                    tmp_browser_dir = "/tmp/ms-playwright"
+                    browser_path = f"{tmp_browser_dir}/chromium_headless_shell-1169/chrome-linux/headless_shell"
+                    
                     # Check if browser is already installed
-                    browser_path = os.path.expanduser("~/.cache/ms-playwright/chromium_headless_shell-1169/chrome-linux/headless_shell")
                     if os.path.exists(browser_path):
                         logger.info(f"✅ Chromium browser already exists at {browser_path}")
                         return True
                     
-                    # Create cache directory if it doesn't exist
-                    cache_dir = os.path.expanduser("~/.cache/ms-playwright")
-                    os.makedirs(cache_dir, exist_ok=True)
+                    # Create cache directory in /tmp which should be writable
+                    os.makedirs(tmp_browser_dir, exist_ok=True)
+                    logger.info(f"📁 Created browser directory at {tmp_browser_dir}")
                     
                     logger.info("🔄 Attempting installation with --with-deps...")
                     result = subprocess.run(
@@ -193,12 +196,13 @@ def setup_fizzo_automation():
                 # Try multiple installation approaches as fallback
                 logger.info("🔄 Trying alternative installation methods...")
                 
-                # Check browser path
-                browser_path = os.path.expanduser("~/.cache/ms-playwright/chromium_headless_shell-1169/chrome-linux/headless_shell")
+                # Use /tmp directory which should be writable
+                tmp_browser_dir = "/tmp/ms-playwright"
+                browser_path = f"{tmp_browser_dir}/chromium_headless_shell-1169/chrome-linux/headless_shell"
                 
-                # Create cache directory if it doesn't exist
-                cache_dir = os.path.expanduser("~/.cache/ms-playwright")
-                os.makedirs(cache_dir, exist_ok=True)
+                # Create cache directory in /tmp which should be writable
+                os.makedirs(tmp_browser_dir, exist_ok=True)
+                logger.info(f"📁 Created browser directory at {tmp_browser_dir}")
                 
                 installation_methods = [
                     # Method 1: With explicit browser version
@@ -210,7 +214,7 @@ def setup_fizzo_automation():
                     # Method 4: Try with explicit path
                     ["python3", "-m", "playwright", "install", "chromium"],
                     # Method 5: Direct download with curl (Linux only)
-                    ["bash", "-c", "curl -o /tmp/playwright-browsers.zip https://playwright.azureedge.net/builds/chromium/1169/chromium-linux.zip && mkdir -p ~/.cache/ms-playwright/chromium_headless_shell-1169/chrome-linux && unzip -o /tmp/playwright-browsers.zip -d ~/.cache/ms-playwright/chromium_headless_shell-1169/chrome-linux && chmod +x ~/.cache/ms-playwright/chromium_headless_shell-1169/chrome-linux/headless_shell"]
+                    ["bash", "-c", f"curl -o /tmp/playwright-browsers.zip https://playwright.azureedge.net/builds/chromium/1169/chromium-linux.zip && mkdir -p {tmp_browser_dir}/chromium_headless_shell-1169/chrome-linux && unzip -o /tmp/playwright-browsers.zip -d {tmp_browser_dir}/chromium_headless_shell-1169/chrome-linux && chmod +x {tmp_browser_dir}/chromium_headless_shell-1169/chrome-linux/headless_shell"]
                 ]
                 
                 for i, method in enumerate(installation_methods):
@@ -298,6 +302,10 @@ if __name__ == "__main__":
                     """Inline Fizzo automation implementation - no external dependencies"""
                     try:
                         from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+                        import os
+                        
+                        # Set Playwright browser path to use our custom location
+                        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/tmp/ms-playwright"
                         
                         # Validate input
                         if not email or not password:
@@ -311,19 +319,46 @@ if __name__ == "__main__":
                         
                         logger.info("🚀 Starting Fizzo auto-update process...")
                         
+                        # Set environment variable for browser path
+                        browser_path = "/tmp/ms-playwright/chromium_headless_shell-1169/chrome-linux/headless_shell"
+                        if os.path.exists(browser_path):
+                            logger.info(f"✅ Using browser at {browser_path}")
+                        else:
+                            logger.warning(f"⚠️ Browser not found at {browser_path}, will try to use system browser")
+                            
+                        # Start Playwright
                         playwright = await async_playwright().start()
-                        browser = await playwright.chromium.launch(
-                            headless=True,
-                            args=[
-                                '--no-sandbox',
-                                '--disable-setuid-sandbox', 
-                                '--disable-dev-shm-usage',
-                                '--disable-accelerated-2d-canvas',
-                                '--no-first-run',
-                                '--no-zygote',
-                                '--disable-gpu'
-                            ]
-                        )
+                        
+                        try:
+                            # Try to launch with executable path first
+                            browser = await playwright.chromium.launch(
+                                headless=True,
+                                executable_path=browser_path if os.path.exists(browser_path) else None,
+                                args=[
+                                    '--no-sandbox',
+                                    '--disable-setuid-sandbox', 
+                                    '--disable-dev-shm-usage',
+                                    '--disable-accelerated-2d-canvas',
+                                    '--no-first-run',
+                                    '--no-zygote',
+                                    '--disable-gpu'
+                                ]
+                            )
+                        except Exception as e:
+                            logger.warning(f"⚠️ Failed to launch browser with executable path: {e}")
+                            # Fallback to default launch
+                            browser = await playwright.chromium.launch(
+                                headless=True,
+                                args=[
+                                    '--no-sandbox',
+                                    '--disable-setuid-sandbox', 
+                                    '--disable-dev-shm-usage',
+                                    '--disable-accelerated-2d-canvas',
+                                    '--no-first-run',
+                                    '--no-zygote',
+                                    '--disable-gpu'
+                                ]
+                            )
                         page = await browser.new_page()
                         
                         # Set mobile user agent
